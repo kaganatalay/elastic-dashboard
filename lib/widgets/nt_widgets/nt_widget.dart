@@ -19,6 +19,7 @@ import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/text_display.d
 import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/toggle_button.dart';
 import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/toggle_switch.dart';
 import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/voltage_view.dart';
+import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/reef_widget.dart';
 
 abstract class NTWidgetModel extends ChangeNotifier {
   String get type;
@@ -193,6 +194,7 @@ class SingleTopicNTWidgetModel extends NTWidgetModel {
           GraphWidget.widgetType,
           MatchTimeWidget.widgetType,
           LargeTextDisplay.widgetType,
+          ReefWidget.widgetType
         ];
       case NT4TypeStr.kString:
         return [

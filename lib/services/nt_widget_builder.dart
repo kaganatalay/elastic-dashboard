@@ -39,6 +39,7 @@ import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/multi_color_vi
 import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/number_bar.dart';
 import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/number_slider.dart';
 import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/radial_gauge.dart';
+import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/reef_widget.dart';
 import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/single_color_view.dart';
 import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/text_display.dart';
 import 'package:elastic_dashboard/widgets/nt_widgets/single_topic/toggle_button.dart';
@@ -140,6 +141,16 @@ class NTWidgetBuilder {
         widget: VoltageView.new,
         fromJson: VoltageViewModel.fromJson,
         minHeight: _normalSize);
+
+    register(
+        name: ReefWidget.widgetType,
+        model: ReefWidgetModel.new,
+        widget: ReefWidget.new,
+        fromJson: ReefWidgetModel.fromJson,
+        minWidth: _normalSize * 2,
+        minHeight: _normalSize * 2,
+        defaultWidth: 2,
+        defaultHeight: 2);
 
     register(
         name: AccelerometerWidget.widgetType,
