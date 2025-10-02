@@ -35,6 +35,66 @@ class ReefWidgetModel extends MultiTopicNTWidgetModel {
     }
   }
 
+  AnimationController? _animationController;
+  Animation<double>? _flashAnimation;
+
+  double get glowIntensity {
+    switch (_state) {
+      case "ready":
+        return 1.5;
+      case "moving":
+        return 3.0;
+      case "done":
+        return 6.0;
+      default:
+        return 0.5;
+    }
+  }
+
+  double get flashSpeed {
+    switch (_state) {
+      case "ready":
+        return 4.0; // Faster flashing
+      case "moving":
+        return 8.0; // Much faster flashing
+      case "done":
+        return 16.0; // Very fast flashing
+      default:
+        return 2.0;
+    }
+  }
+
+  Animation<double>? get flashAnimation => _flashAnimation;
+
+  void initializeAnimation(TickerProvider tickerProvider) {
+    _animationController?.dispose();
+
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: tickerProvider,
+    );
+
+    _flashAnimation = Tween<double>(
+      begin: 0.5,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController!,
+      curve: Curves.easeInOut,
+    ));
+
+    _animationController!.repeat(reverse: true);
+  }
+
+  void updateAnimationSpeed() {
+    if (_animationController != null) {
+      _animationController!.stop();
+      _animationController!.duration = Duration(
+        milliseconds: (1000 / flashSpeed).round(),
+      );
+      _animationController!.repeat(reverse: true);
+    }
+  }
+
   ReefWidgetModel({
     required super.ntConnection,
     required super.preferences,
@@ -63,6 +123,8 @@ class ReefWidgetModel extends MultiTopicNTWidgetModel {
       ];
 
   void updateValues() {
+    final oldState = _state;
+
     // Update side
     final sideValue = tryCast<int>(sideSubscription.value);
     if (sideValue != null && sideValue >= 0 && sideValue <= 5) {
@@ -75,7 +137,18 @@ class ReefWidgetModel extends MultiTopicNTWidgetModel {
       _state = stateValue;
     }
 
+    // Update animation speed if state changed
+    if (oldState != _state) {
+      updateAnimationSpeed();
+    }
+
     refresh();
+  }
+
+  @override
+  void dispose() {
+    _animationController?.dispose();
+    super.dispose();
   }
 }
 
@@ -86,12 +159,31 @@ class ReefWidget extends NTWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _ReefWidgetStateful();
+  }
+}
+
+class _ReefWidgetStateful extends StatefulWidget {
+  @override
+  State<_ReefWidgetStateful> createState() => _ReefWidgetStatefulState();
+}
+
+class _ReefWidgetStatefulState extends State<_ReefWidgetStateful>
+    with TickerProviderStateMixin {
+  @override
+  Widget build(BuildContext context) {
     ReefWidgetModel model = cast(context.watch<NTWidgetModel>());
+
+    // Initialize animation if not already done
+    if (model._animationController == null) {
+      model.initializeAnimation(this);
+    }
 
     return ListenableBuilder(
       listenable: Listenable.merge([
         model.sideSubscription,
         model.stateSubscription,
+        if (model.flashAnimation != null) model.flashAnimation!,
       ]),
       builder: (context, child) {
         model.updateValues();
@@ -116,7 +208,9 @@ class ReefWidget extends NTWidget {
                       selectedSide: model.selectedSide,
                       selectedSideColor: model.stateColor,
                       defaultSideColor: Colors.grey.shade400,
-                      strokeWidth: 56.0,
+                      strokeWidth: 48.0,
+                      glowIntensity: model.glowIntensity,
+                      flashOpacity: model.flashAnimation?.value ?? 1.0,
                     ),
                     child: Container(),
                   ),
@@ -140,12 +234,16 @@ class ReefHexagonPainter extends CustomPainter {
   final Color selectedSideColor;
   final Color defaultSideColor;
   final double strokeWidth;
+  final double glowIntensity;
+  final double flashOpacity;
 
   const ReefHexagonPainter({
     required this.selectedSide,
     required this.selectedSideColor,
     required this.defaultSideColor,
     this.strokeWidth = 2.0,
+    this.glowIntensity = 1.0,
+    this.flashOpacity = 1.0,
   });
 
   @override
@@ -178,15 +276,29 @@ class ReefHexagonPainter extends CustomPainter {
       }
     }
 
-    // Then draw the selected side on top
+    // Draw glow effect for selected side (multiple layers)
+    final startVertex = vertices[selectedSide];
+    final endVertex = vertices[(selectedSide + 1) % 6];
+
+    // Outer glow layers
+    for (int j = 0; j < (glowIntensity * 3).round(); j++) {
+      final glowPaint = Paint()
+        ..color = selectedSideColor.withValues(
+          alpha: (0.1 * flashOpacity * (1 - j / (glowIntensity * 3))),
+        )
+        ..strokeWidth = strokeWidth + (j * 4)
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawLine(startVertex, endVertex, glowPaint);
+    }
+
+    // Then draw the selected side on top with flashing effect
     final selectedPaint = Paint()
-      ..color = selectedSideColor
+      ..color = selectedSideColor.withValues(alpha: flashOpacity)
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-
-    final startVertex = vertices[selectedSide];
-    final endVertex = vertices[(selectedSide + 1) % 6];
 
     canvas.drawLine(startVertex, endVertex, selectedPaint);
 
@@ -198,13 +310,6 @@ class ReefHexagonPainter extends CustomPainter {
     for (final vertex in vertices) {
       canvas.drawCircle(vertex, strokeWidth / 2, vertexPaint);
     }
-
-    // // Draw center point
-    // final centerPaint = Paint()
-    //   ..color = selectedSideColor.withValues(alpha: 0.8)
-    //   ..style = PaintingStyle.fill;
-
-    // canvas.drawCircle(center, strokeWidth, centerPaint);
   }
 
   @override
@@ -212,6 +317,8 @@ class ReefHexagonPainter extends CustomPainter {
     return oldDelegate.selectedSide != selectedSide ||
         oldDelegate.selectedSideColor != selectedSideColor ||
         oldDelegate.defaultSideColor != defaultSideColor ||
-        oldDelegate.strokeWidth != strokeWidth;
+        oldDelegate.strokeWidth != strokeWidth ||
+        oldDelegate.glowIntensity != glowIntensity ||
+        oldDelegate.flashOpacity != flashOpacity;
   }
 }
